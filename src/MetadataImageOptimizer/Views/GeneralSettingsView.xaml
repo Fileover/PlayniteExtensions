@@ -48,14 +48,17 @@
     </StackPanel>
 
     <controls:ImageTypeSettingsGroupBox Margin="0,15,0,0"
+      AvailableCompressionModes="{Binding Settings.AvailableCompressionModes}"
       AvailableImageFormats="{Binding Settings.AvailableImageFormats}"
       Header="Background"
       Settings="{Binding Settings.Background}" />
     <controls:ImageTypeSettingsGroupBox Margin="0,15,0,0"
+      AvailableCompressionModes="{Binding Settings.AvailableCompressionModes}"
       AvailableImageFormats="{Binding Settings.AvailableImageFormats}"
       Header="Cover"
       Settings="{Binding Settings.Cover}" />
     <controls:ImageTypeSettingsGroupBox Margin="0,15,0,0"
+      AvailableCompressionModes="{Binding Settings.AvailableCompressionModes}"
       AvailableImageFormats="{Binding Settings.AvailableImageFormats}"
       Header="Icon"
       Settings="{Binding Settings.Icon}" />

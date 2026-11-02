@@ -12,6 +12,8 @@ namespace MetadataImageOptimizer.Settings
         private PngCompressionLevel pngCompressionLevel;
         private WebpEncodingMethod webpEncodingMethod;
         private int webpQuality;
+        private bool stripMetadata = true;
+        private bool skipIfLarger = true;
 
         [DontSerialize]
         public Dictionary<PngCompressionLevel, string> AvailablePngCompressionLevels { get; }
@@ -69,5 +71,15 @@ namespace MetadataImageOptimizer.Settings
                 SetValue(ref webpQuality, value);
             }
         }
+
+        /// <summary>
+        /// When enabled, EXIF, IPTC and XMP metadata is removed from optimized images. The colour profile is kept.
+        /// </summary>
+        public bool StripMetadata { get => stripMetadata; set => SetValue(ref stripMetadata, value); }
+
+        /// <summary>
+        /// When enabled, an image is left untouched if re-encoding it would not make the file smaller.
+        /// </summary>
+        public bool SkipIfLarger { get => skipIfLarger; set => SetValue(ref skipIfLarger, value); }
     }
 }

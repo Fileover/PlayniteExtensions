@@ -18,6 +18,12 @@ namespace MetadataImageOptimizer.Controls
             , typeof(ImageTypeSettingsGroupBox)
             , new PropertyMetadata(default(Dictionary<string, string>)));
 
+        public static readonly DependencyProperty AvailableCompressionModesProperty = DependencyProperty.Register(
+            nameof(AvailableCompressionModes)
+            , typeof(Dictionary<CompressionMode, string>)
+            , typeof(ImageTypeSettingsGroupBox)
+            , new PropertyMetadata(default(Dictionary<CompressionMode, string>)));
+
         public static readonly DependencyProperty HeaderProperty = DependencyProperty.Register(
             nameof(Header)
             , typeof(string)
@@ -34,6 +40,12 @@ namespace MetadataImageOptimizer.Controls
         {
             get => (Dictionary<string, string>)GetValue(AvailableImageFormatsProperty);
             set => SetValue(AvailableImageFormatsProperty, value);
+        }
+
+        public Dictionary<CompressionMode, string> AvailableCompressionModes
+        {
+            get => (Dictionary<CompressionMode, string>)GetValue(AvailableCompressionModesProperty);
+            set => SetValue(AvailableCompressionModesProperty, value);
         }
 
         public string Header

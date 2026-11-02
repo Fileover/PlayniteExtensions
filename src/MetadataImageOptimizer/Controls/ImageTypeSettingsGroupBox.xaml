@@ -27,6 +27,8 @@
         <RowDefinition Height="Auto" />
         <RowDefinition Height="Auto" />
         <RowDefinition Height="Auto" />
+        <RowDefinition Height="Auto" />
+        <RowDefinition Height="Auto" />
       </Grid.RowDefinitions>
       <Grid.ColumnDefinitions>
         <ColumnDefinition Width="Auto" />
@@ -68,6 +70,51 @@
         <TextBox MinWidth="20"
           IsEnabled="{Binding Settings.Optimize, RelativeSource={RelativeSource AncestorType=UserControl}}"
           Text="{Binding Settings.MaxHeight, RelativeSource={RelativeSource AncestorType=UserControl}}" />
+      </StackPanel>
+
+      <TextBlock Grid.Row="3"
+        Grid.Column="0"
+        Margin="0,5,20,0"
+        Text="Compress:" />
+      <ComboBox Grid.Row="3"
+        Grid.Column="1"
+        MinWidth="100"
+        Margin="0,5,0,0"
+        HorizontalAlignment="Left"
+        DisplayMemberPath="Value"
+        IsEnabled="{Binding Settings.Optimize, RelativeSource={RelativeSource AncestorType=UserControl}}"
+        ItemsSource="{Binding AvailableCompressionModes, RelativeSource={RelativeSource AncestorType=UserControl}}"
+        SelectedValue="{Binding Settings.Compression, RelativeSource={RelativeSource AncestorType=UserControl}}"
+        SelectedValuePath="Key"
+        ToolTip="Quality: compress using the quality values from the 'Quality' tab.&#x0a;Target size: automatically lower the quality until the image fits within the size below." />
+
+      <TextBlock Grid.Row="4"
+        Grid.Column="0"
+        Margin="0,5,20,0"
+        Text="Target size:" />
+      <StackPanel Grid.Row="4"
+        Grid.Column="1"
+        Margin="0,5,0,0"
+        Orientation="Horizontal">
+        <TextBox MinWidth="50"
+          Text="{Binding Settings.TargetSizeKb, RelativeSource={RelativeSource AncestorType=UserControl}}"
+          ToolTip="Maximum file size in kilobytes. Only used when 'Compress' is set to 'Target size'.">
+          <TextBox.Style>
+            <Style BasedOn="{StaticResource {x:Type TextBox}}" TargetType="TextBox">
+              <Setter Property="IsEnabled" Value="False" />
+              <Style.Triggers>
+                <MultiDataTrigger>
+                  <MultiDataTrigger.Conditions>
+                    <Condition Binding="{Binding Settings.Optimize, RelativeSource={RelativeSource AncestorType=UserControl}}" Value="True" />
+                    <Condition Binding="{Binding Settings.Compression, RelativeSource={RelativeSource AncestorType=UserControl}}" Value="TargetSize" />
+                  </MultiDataTrigger.Conditions>
+                  <Setter Property="IsEnabled" Value="True" />
+                </MultiDataTrigger>
+              </Style.Triggers>
+            </Style>
+          </TextBox.Style>
+        </TextBox>
+        <TextBlock Margin="5,0,0,0" Text="KB" />
       </StackPanel>
     </Grid>
   </GroupBox>

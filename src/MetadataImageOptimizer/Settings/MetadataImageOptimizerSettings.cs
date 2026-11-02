@@ -28,6 +28,13 @@ namespace MetadataImageOptimizer.Settings
             , { "webp", "WebP (Lossy)" }
         };
 
+        [DontSerialize]
+        public Dictionary<CompressionMode, string> AvailableCompressionModes { get; } = new Dictionary<CompressionMode, string>
+        {
+            { CompressionMode.Quality, "Quality" }
+            , { CompressionMode.TargetSize, "Target size" }
+        };
+
         public bool AlwaysOptimizeOnSave { get => alwaysOptimizeOnSave; set => SetValue(ref alwaysOptimizeOnSave, value); }
         public bool RunInBackground { get => runInBackground; set => SetValue(ref runInBackground, value); }
         public AddonSettings AddonSettings { get => addonSettings; set => SetValue(ref addonSettings, value); }
@@ -49,6 +56,8 @@ namespace MetadataImageOptimizer.Settings
                 , MaxHeight = 1080
                 , MaxWidth = 1920
                 , Optimize = false
+                , Compression = CompressionMode.Quality
+                , TargetSizeKb = 800
             };
 
             cover = new ImageTypeSettings
@@ -57,6 +66,8 @@ namespace MetadataImageOptimizer.Settings
                 , MaxHeight = 900
                 , MaxWidth = 600
                 , Optimize = false
+                , Compression = CompressionMode.Quality
+                , TargetSizeKb = 400
             };
 
             icon = new ImageTypeSettings
@@ -65,6 +76,8 @@ namespace MetadataImageOptimizer.Settings
                 , MaxHeight = 256
                 , MaxWidth = 256
                 , Optimize = false
+                , Compression = CompressionMode.Quality
+                , TargetSizeKb = 100
             };
 
             quality = new QualitySettings
@@ -73,6 +86,8 @@ namespace MetadataImageOptimizer.Settings
                 , PngCompressionLevel = PngCompressionLevel.Level6
                 , WebpEncodingMethod = WebpEncodingMethod.Level4
                 , WebpQuality = 90
+                , StripMetadata = true
+                , SkipIfLarger = true
             };
         }
     }

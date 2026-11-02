@@ -32,3 +32,4 @@ _ReSharper*/
 .idea/
 .vs/
 *.pubxml
+.workbuddy-ai/

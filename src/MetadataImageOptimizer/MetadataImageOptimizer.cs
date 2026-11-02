@@ -112,29 +112,29 @@ namespace MetadataImageOptimizer
         private void OnGameUpdated(object sender, ItemUpdatedEventArgs<Game> e)
         {
             var optimizerSettings = settingsVm.Settings;
-            var gamesToUpdate = e.UpdatedItems;
 
-            // Ignore games where the playing/installing status was updated
-            gamesToUpdate = gamesToUpdate.Where(
+            // Every image type can be switched off, in which case there is nothing to do at all.
+            // Without this check the progress dialog still showed up on every game edit.
+            if (!optimizerSettings.Background.Optimize
+                && !optimizerSettings.Cover.Optimize
+                && !optimizerSettings.Icon.Optimize)
+            {
+                return;
+            }
+
+            var gamesToUpdate = e.UpdatedItems
+                // Ignore games where the playing/installing status was updated
+                .Where(
                     change => change.OldData.IsInstalled == change.NewData.IsInstalled
                         && change.OldData.IsInstalling == change.NewData.IsInstalling
                         && change.OldData.IsLaunching == change.NewData.IsLaunching
                         && change.OldData.IsRunning == change.NewData.IsRunning
                         && change.OldData.IsUninstalling == change.NewData.IsUninstalling)
+                // Ignore the game we are currently updating
+                .Where(change => change.OldData.Id != inProcessGameId)
+                // Only keep games where an enabled image type actually changed
+                .Where(change => ShouldOptimize(change, optimizerSettings))
                 .ToList();
-
-            // Ignore the game we are currently updating
-            gamesToUpdate = gamesToUpdate.Where(change => change.OldData.Id != inProcessGameId)
-                .ToList();
-
-            if (!optimizerSettings.AlwaysOptimizeOnSave)
-            {
-                gamesToUpdate = gamesToUpdate.Where(
-                        change => change.OldData.BackgroundImage != change.NewData.BackgroundImage
-                            || change.OldData.CoverImage != change.NewData.CoverImage
-                            || change.OldData.Icon != change.NewData.Icon)
-                    .ToList();
-            }
 
             if (gamesToUpdate.Count == 0)
             {
@@ -166,6 +166,27 @@ namespace MetadataImageOptimizer
             }
         }
 
+        /// <summary>
+        /// Determines whether any image of the updated game needs to be optimized, taking both the per image type
+        /// 'Optimize' setting and the 'Always optimize images when editing a game' setting into account.
+        /// </summary>
+        private static bool ShouldOptimize(ItemUpdateEvent<Game> change, MetadataImageOptimizerSettings optimizerSettings)
+        {
+            return ShouldOptimize(optimizerSettings.Background, change.OldData.BackgroundImage, change.NewData.BackgroundImage, optimizerSettings.AlwaysOptimizeOnSave)
+                || ShouldOptimize(optimizerSettings.Cover, change.OldData.CoverImage, change.NewData.CoverImage, optimizerSettings.AlwaysOptimizeOnSave)
+                || ShouldOptimize(optimizerSettings.Icon, change.OldData.Icon, change.NewData.Icon, optimizerSettings.AlwaysOptimizeOnSave);
+        }
+
+        private static bool ShouldOptimize(ImageTypeSettings typeSettings, string oldPath, string newPath, bool alwaysOptimize)
+        {
+            if (typeSettings == null || !typeSettings.Optimize)
+            {
+                return false;
+            }
+
+            return alwaysOptimize || !string.Equals(oldPath, newPath, StringComparison.Ordinal);
+        }
+
         private void OptimizeGames(List<Game> games, MetadataImageOptimizerSettings optimizerSettings)
         {
             if (games.Count == 0)
@@ -173,6 +194,15 @@ namespace MetadataImageOptimizer
                 return;
             }
 
+            if (!optimizerSettings.Background.Optimize
+                && !optimizerSettings.Cover.Optimize
+                && !optimizerSettings.Icon.Optimize)
+            {
+                api.Dialogs.ShowMessage(
+                    "No image types are enabled for optimization. Enable at least one image type in the add-on settings."
+                    , "MetadataImageOptimizer - Nothing to optimize");
+                return;
+            }
 
             if (optimizerSettings.RunInBackground)
             {
@@ -214,20 +244,22 @@ namespace MetadataImageOptimizer
         {
             var game = api.Database.Games[change.NewData.Id];
 
-            var backgroundChanged = optimizerSettings.AlwaysOptimizeOnSave || change.OldData.BackgroundImage != change.NewData.BackgroundImage;
-            var coverChanged = optimizerSettings.AlwaysOptimizeOnSave || change.OldData.CoverImage != change.NewData.CoverImage;
-            var iconChanged = optimizerSettings.AlwaysOptimizeOnSave || change.OldData.Icon != change.NewData.Icon;
+            var optimizeBackground = ShouldOptimize(optimizerSettings.Background, change.OldData.BackgroundImage, change.NewData.BackgroundImage, optimizerSettings.AlwaysOptimizeOnSave);
+            var optimizeCover = ShouldOptimize(optimizerSettings.Cover, change.OldData.CoverImage, change.NewData.CoverImage, optimizerSettings.AlwaysOptimizeOnSave);
+            var optimizeIcon = ShouldOptimize(optimizerSettings.Icon, change.OldData.Icon, change.NewData.Icon, optimizerSettings.AlwaysOptimizeOnSave);
 
-            if (backgroundChanged || coverChanged || iconChanged)
+            if (!optimizeBackground && !optimizeCover && !optimizeIcon)
             {
-                if (optimizerSettings.RunInBackground)
-                {
-                    QueueOptimizeGame(game.Id, backgroundChanged, coverChanged, iconChanged);
-                }
-                else
-                {
-                    OptimizeGame(game.Id, backgroundChanged, coverChanged, iconChanged);
-                }
+                return;
+            }
+
+            if (optimizerSettings.RunInBackground)
+            {
+                QueueOptimizeGame(game.Id, optimizeBackground, optimizeCover, optimizeIcon);
+            }
+            else
+            {
+                OptimizeGame(game.Id, optimizeBackground, optimizeCover, optimizeIcon);
             }
         }
 
