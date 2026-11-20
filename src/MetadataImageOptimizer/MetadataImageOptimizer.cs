@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Threading;
+using System.Threading.Tasks;
 using System.Windows.Controls;
 using MetadataImageOptimizer.Addons;
 using MetadataImageOptimizer.Addons.BackgroundChanger;
@@ -316,59 +317,64 @@ namespace MetadataImageOptimizer
             var backgroundFailed = false;
             var coverFailed = false;
             var iconFailed = false;
-            string failureMessage = null;
+            var failures = new ConcurrentQueue<string>();
 
             logger.Debug($"Processing '{game.Name}'. Background: {optimizeBackground} | Cover: {optimizeCover} | Icon: {optimizeIcon}");
+
+            var work = new List<ImageOptimizationWork>();
             if (optimizeBackground && !string.IsNullOrWhiteSpace(game.BackgroundImage))
             {
-                try
-                {
-                    var backgroundPath = api.Database.GetFullFilePath(game.BackgroundImage);
-                    newBackgroundPath = ImageOptimizer.Optimize(backgroundPath, optimizerSettings.Background, optimizerSettings.Quality);
-                }
-                catch (Exception ex)
-                {
-                    logger.Error(ex, $"Error while optimizing background image for '{game.Name}'.");
-                    backgroundFailed = true;
-                    failureMessage = failureMessage ?? ex.Message;
-                }
+                work.Add(new ImageOptimizationWork(
+                    "background"
+                    , api.Database.GetFullFilePath(game.BackgroundImage)
+                    , optimizerSettings.Background
+                    , path => newBackgroundPath = path
+                    , () => backgroundFailed = true));
             }
 
             if (optimizeCover && !string.IsNullOrWhiteSpace(game.CoverImage))
             {
-                try
-                {
-                    var coverPath = api.Database.GetFullFilePath(game.CoverImage);
-                    newCoverPath = ImageOptimizer.Optimize(coverPath, optimizerSettings.Cover, optimizerSettings.Quality);
-                }
-                catch (Exception ex)
-                {
-                    logger.Error(ex, $"Error while optimizing cover image for '{game.Name}'.");
-                    coverFailed = true;
-                    failureMessage = failureMessage ?? ex.Message;
-                }
+                work.Add(new ImageOptimizationWork(
+                    "cover"
+                    , api.Database.GetFullFilePath(game.CoverImage)
+                    , optimizerSettings.Cover
+                    , path => newCoverPath = path
+                    , () => coverFailed = true));
             }
 
             if (optimizeIcon && !string.IsNullOrWhiteSpace(game.Icon))
             {
-                try
-                {
-                    var iconPath = api.Database.GetFullFilePath(game.Icon);
-                    newIconPath = ImageOptimizer.Optimize(iconPath, optimizerSettings.Icon, optimizerSettings.Quality);
-                }
-                catch (Exception ex)
-                {
-                    logger.Error(ex, $"Error while optimizing icon for '{game.Name}'.");
-                    iconFailed = true;
-                    failureMessage = failureMessage ?? ex.Message;
-                }
+                work.Add(new ImageOptimizationWork(
+                    "icon"
+                    , api.Database.GetFullFilePath(game.Icon)
+                    , optimizerSettings.Icon
+                    , path => newIconPath = path
+                    , () => iconFailed = true));
             }
 
-            if (backgroundFailed || coverFailed || iconFailed)
+            // Only file work is parallel; database changes below stay on the calling thread.
+            Parallel.ForEach(
+                work
+                , new ParallelOptions { MaxDegreeOfParallelism = 2 }
+                , item =>
+                {
+                    try
+                    {
+                        item.SetResult(ImageOptimizer.Optimize(item.ImagePath, item.Settings, optimizerSettings.Quality));
+                    }
+                    catch (Exception ex)
+                    {
+                        logger.Error(ex, $"Error while optimizing {item.Name} image for '{game.Name}'.");
+                        item.SetFailed();
+                        failures.Enqueue(ex.Message);
+                    }
+                });
+
+            if (!failures.IsEmpty)
             {
                 api.Notifications.Add(
                     "metadataimageoptimizer-optimize-failed"
-                    , $"Failed to optimize images of '{game.Name}': {failureMessage}"
+                    , $"Failed to optimize images of '{game.Name}': {string.Join("; ", failures)}"
                     , NotificationType.Error);
             }
 
@@ -408,6 +414,29 @@ namespace MetadataImageOptimizer
             }
 
             OptimizationCacheHelper.Add(game, backgroundFailed, coverFailed, iconFailed);
+        }
+
+        private sealed class ImageOptimizationWork
+        {
+            public ImageOptimizationWork(
+                string name
+                , string imagePath
+                , ImageTypeSettings settings
+                , Action<string> setResult
+                , Action setFailed)
+            {
+                Name = name;
+                ImagePath = imagePath;
+                Settings = settings;
+                SetResult = setResult;
+                SetFailed = setFailed;
+            }
+
+            public string Name { get; }
+            public string ImagePath { get; }
+            public ImageTypeSettings Settings { get; }
+            public Action<string> SetResult { get; }
+            public Action SetFailed { get; }
         }
 
         #region Background processing

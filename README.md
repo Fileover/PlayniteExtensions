@@ -52,7 +52,9 @@ to [libjxl](https://github.com/libjxl/libjxl)'s `cjxl.exe`, which ships in the `
 
 Encoding time grows with the pixel count and the effort level. The timeout the extension gives `cjxl.exe` is
 scaled accordingly (minimum of 5 minutes), so a lossless 1920×620 background at effort 11 can take several
-minutes per image — and an image that fails is retried on the next run instead of being cached as done.
+minutes per image — and an image that fails is retried on the next run instead of being cached as done. The
+background, cover and icon of a game are encoded two at a time; there is still a single progress dialog and the
+database is updated once all three have finished.
 
 Existing `.jxl` images can be re-encoded, including with a target size, but not resized or converted to another
 format: libjxl can read JPEG XL, but ImageSharp cannot decode it. Note that Playnite needs a system JPEG XL codec

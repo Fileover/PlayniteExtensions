@@ -84,5 +84,5 @@ Packages:
     Changelog:
     - Added JPEG XL output through the bundled libjxl cjxl.exe encoder, with quality, lossless, effort and Brotli effort settings
     - Fixed the duplicate progress dialog when a game update triggered another optimization
-    - Fixed background images being skipped after an encoder timeout: the timeout now scales with image size and effort, failed images are retried, and manual optimization bypasses the cache
+    - Fixed background images being skipped after a slow JPEG XL encode - the timeout now scales with image size and effort, failed images are retried, and manual optimization bypasses the cache
     - Added scrollbars to settings window when controls don''t fit otherwise
