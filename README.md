@@ -50,6 +50,10 @@ to [libjxl](https://github.com/libjxl/libjxl)'s `cjxl.exe`, which ships in the `
 | JPEG XL Effort | `-e` | 1 to 11. 11 is an expert mode (`--allow_expert_options`, added automatically) that is roughly ten times slower for a few percent smaller lossless files. Defaults to 7. |
 | JPEG XL Brotli effort | `--brotli_effort` | 0 to 11, only used for the metadata boxes (colour profile, EXIF, XMP), so it does nothing when metadata is removed. Defaults to 9. |
 
+Encoding time grows with the pixel count and the effort level. The timeout the extension gives `cjxl.exe` is
+scaled accordingly (minimum of 5 minutes), so a lossless 1920×620 background at effort 11 can take several
+minutes per image — and an image that fails is retried on the next run instead of being cached as done.
+
 Existing `.jxl` images can be re-encoded, including with a target size, but not resized or converted to another
 format: libjxl can read JPEG XL, but ImageSharp cannot decode it. Note that Playnite needs a system JPEG XL codec
 installed to display these images.

@@ -32,6 +32,11 @@ namespace MetadataImageOptimizer.Optimization
         private const int MaximumSearchIterations = 8;
 
         /// <summary>
+        /// Assumed pixel count for JPEG XL sources, whose real dimensions can't be read without a decoder.
+        /// </summary>
+        private const long AssumedJxlPixelCount = 1920L * 1080L;
+
+        /// <summary>
         /// Palette sizes that are attempted, in order, when a PNG has to be shrunk below the configured budget.
         /// </summary>
         private static readonly int[] PaletteSizes = { 256, 128, 64, 32, 16 };
@@ -340,7 +345,7 @@ namespace MetadataImageOptimizer.Optimization
                     image.Save(stream, new PngEncoder { CompressionLevel = PngCompressionLevel.Level1 });
                 }
 
-                return EncodeJxlFile(inputPath, targetBytes, qualitySettings);
+                return EncodeJxlFile(inputPath, targetBytes, qualitySettings, (long)image.Width * image.Height);
             }
             finally
             {
@@ -352,22 +357,29 @@ namespace MetadataImageOptimizer.Optimization
         /// Encodes a file cjxl can read (the temporary PNG above, or an existing JPEG XL image) using the
         /// configured JPEG XL options.
         /// </summary>
-        private static EncodeAttempt EncodeJxlFile(string inputPath, long? targetBytes, QualitySettings qualitySettings)
+        /// <param name="pixelCount">Used to scale the encoder timeout. JPEG XL sources can't be decoded, so their
+        /// dimensions are unknown and a typical 1080p size is assumed.</param>
+        private static EncodeAttempt EncodeJxlFile(
+            string inputPath
+            , long? targetBytes
+            , QualitySettings qualitySettings
+            , long? pixelCount = null)
         {
             var effort = qualitySettings.JxlEffort;
             var brotliEffort = qualitySettings.JxlBrotliEffort;
+            var timeout = JxlEncoder.GetTimeout(pixelCount ?? AssumedJxlPixelCount, effort);
 
             if (qualitySettings.JxlLossless)
             {
                 // Lossless output can't be shrunk by lowering a quality value, so the budget is only checked
-                var bytes = JxlEncoder.Encode(inputPath, null, effort, brotliEffort);
+                var bytes = JxlEncoder.Encode(inputPath, null, effort, brotliEffort, timeout);
                 return new EncodeAttempt(bytes, null, targetBytes == null || bytes.LongLength <= targetBytes.Value);
             }
 
             return EncodeLossy(
                 targetBytes
                 , qualitySettings.JxlQuality
-                , quality => JxlEncoder.Encode(inputPath, quality, effort, brotliEffort));
+                , quality => JxlEncoder.Encode(inputPath, quality, effort, brotliEffort, timeout));
         }
 
         /// <summary>

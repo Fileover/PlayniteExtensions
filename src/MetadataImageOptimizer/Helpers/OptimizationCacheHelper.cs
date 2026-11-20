@@ -12,6 +12,12 @@ namespace MetadataImageOptimizer.Helpers
     {
         private const string OptimizationCacheFileName = "optimization-cache";
 
+        /// <summary>
+        /// Stored size for an image whose optimization failed. It never matches a real file size, so the next run
+        /// retries the image instead of skipping it as unchanged.
+        /// </summary>
+        private const long FailedFileSize = -1;
+
         private static readonly ILogger Logger = LogManager.GetLogger();
         private static readonly List<OptimizationCacheItem> OptimizationCache = new List<OptimizationCacheItem>();
 
@@ -22,7 +28,11 @@ namespace MetadataImageOptimizer.Helpers
         /// Adds the specified game to the optimization cache
         /// </summary>
         /// <param name="game">The game to add</param>
-        public static void Add(Game game)
+        /// <param name="backgroundFailed">Set when the background image could not be optimized, so the next run
+        /// tries again instead of skipping it.</param>
+        /// <param name="coverFailed">Set when the cover image could not be optimized.</param>
+        /// <param name="iconFailed">Set when the icon could not be optimized.</param>
+        public static void Add(Game game, bool backgroundFailed = false, bool coverFailed = false, bool iconFailed = false)
         {
             try
             {
@@ -36,24 +46,24 @@ namespace MetadataImageOptimizer.Helpers
                 var iconPath = string.IsNullOrWhiteSpace(game.Icon) ? "C:\\" : api.Database.GetFullFilePath(game.Icon);
                 var iconFile = new FileInfo(iconPath);
 
+                var backgroundSize = GetCachedSize(backgroundFile, backgroundFailed);
+                var coverSize = GetCachedSize(coverFile, coverFailed);
+                var iconSize = GetCachedSize(iconFile, iconFailed);
+
                 var existingCacheItem = OptimizationCache.FirstOrDefault(x => x.GameId == game.Id);
                 if (existingCacheItem != null)
                 {
                     OptimizationCache.Remove(existingCacheItem);
 
-                    existingCacheItem.BackgroundFileSize = backgroundFile.Exists ? backgroundFile.Length : 0;
-                    existingCacheItem.CoverFileSize = coverFile.Exists ? coverFile.Length : 0;
-                    existingCacheItem.IconFileSize = iconFile.Exists ? iconFile.Length : 0;
+                    existingCacheItem.BackgroundFileSize = backgroundSize;
+                    existingCacheItem.CoverFileSize = coverSize;
+                    existingCacheItem.IconFileSize = iconSize;
 
                     OptimizationCache.Add(existingCacheItem);
                 }
                 else
                 {
-                    var cacheItem = new OptimizationCacheItem(
-                        game.Id
-                        , backgroundFile.Exists ? backgroundFile.Length : 0
-                        , coverFile.Exists ? coverFile.Length : 0
-                        , iconFile.Exists ? iconFile.Length : 0);
+                    var cacheItem = new OptimizationCacheItem(game.Id, backgroundSize, coverSize, iconSize);
                     OptimizationCache.Add(cacheItem);
                 }
             }
@@ -73,6 +83,20 @@ namespace MetadataImageOptimizer.Helpers
 
                 Logger.Error(ex, errorMsg);
             }
+        }
+
+        /// <summary>
+        /// The size to store for an image. Failed optimizations are stored as <see cref="FailedFileSize"/> so
+        /// <see cref="IsCheckNecessary"/> keeps returning <c>true</c> for that image.
+        /// </summary>
+        private static long GetCachedSize(FileInfo file, bool failed)
+        {
+            if (failed)
+            {
+                return FailedFileSize;
+            }
+
+            return file.Exists ? file.Length : 0;
         }
 
         /// <summary>

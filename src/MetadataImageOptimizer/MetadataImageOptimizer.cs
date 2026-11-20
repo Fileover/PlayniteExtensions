@@ -218,7 +218,8 @@ namespace MetadataImageOptimizer
                         game.Id
                         , optimizerSettings.Background.Optimize
                         , optimizerSettings.Cover.Optimize
-                        , optimizerSettings.Icon.Optimize);
+                        , optimizerSettings.Icon.Optimize
+                        , true);
                 }
 
                 logger.Info($"Added {games.Count} games to queue.");
@@ -237,7 +238,8 @@ namespace MetadataImageOptimizer
                                 game.Id
                                 , optimizerSettings.Background.Optimize
                                 , optimizerSettings.Cover.Optimize
-                                , optimizerSettings.Icon.Optimize);
+                                , optimizerSettings.Icon.Optimize
+                                , true);
 
                             globalProgress.CurrentProgressValue += 1;
                         }
@@ -269,7 +271,7 @@ namespace MetadataImageOptimizer
             }
         }
 
-        private void OptimizeGame(Guid gameId, bool optimizeBackground, bool optimizeCover, bool optimizeIcon)
+        private void OptimizeGame(Guid gameId, bool optimizeBackground, bool optimizeCover, bool optimizeIcon, bool force = false)
         {
             // Register the game before touching the database, so the ItemUpdated event raised by our own update
             // is ignored instead of starting a second optimization (and a second progress dialog) for it.
@@ -281,7 +283,7 @@ namespace MetadataImageOptimizer
 
             try
             {
-                OptimizeGameCore(gameId, optimizeBackground, optimizeCover, optimizeIcon);
+                OptimizeGameCore(gameId, optimizeBackground, optimizeCover, optimizeIcon, force);
             }
             finally
             {
@@ -289,7 +291,7 @@ namespace MetadataImageOptimizer
             }
         }
 
-        private void OptimizeGameCore(Guid gameId, bool optimizeBackground, bool optimizeCover, bool optimizeIcon)
+        private void OptimizeGameCore(Guid gameId, bool optimizeBackground, bool optimizeCover, bool optimizeIcon, bool force)
         {
             var pathsChanged = false;
             var optimizerSettings = settingsVm.Settings;
@@ -301,7 +303,8 @@ namespace MetadataImageOptimizer
                 return;
             }
 
-            if (!OptimizationCacheHelper.IsCheckNecessary(game))
+            // An explicit "Optimize images" action always runs, otherwise unchanged images are skipped
+            if (!force && !OptimizationCacheHelper.IsCheckNecessary(game))
             {
                 logger.Debug($"Skipping '{game.Name}'. No change from previously cached information.");
                 return;
@@ -310,6 +313,10 @@ namespace MetadataImageOptimizer
             string newBackgroundPath = null;
             string newCoverPath = null;
             string newIconPath = null;
+            var backgroundFailed = false;
+            var coverFailed = false;
+            var iconFailed = false;
+            string failureMessage = null;
 
             logger.Debug($"Processing '{game.Name}'. Background: {optimizeBackground} | Cover: {optimizeCover} | Icon: {optimizeIcon}");
             if (optimizeBackground && !string.IsNullOrWhiteSpace(game.BackgroundImage))
@@ -322,6 +329,8 @@ namespace MetadataImageOptimizer
                 catch (Exception ex)
                 {
                     logger.Error(ex, $"Error while optimizing background image for '{game.Name}'.");
+                    backgroundFailed = true;
+                    failureMessage = failureMessage ?? ex.Message;
                 }
             }
 
@@ -335,6 +344,8 @@ namespace MetadataImageOptimizer
                 catch (Exception ex)
                 {
                     logger.Error(ex, $"Error while optimizing cover image for '{game.Name}'.");
+                    coverFailed = true;
+                    failureMessage = failureMessage ?? ex.Message;
                 }
             }
 
@@ -348,7 +359,17 @@ namespace MetadataImageOptimizer
                 catch (Exception ex)
                 {
                     logger.Error(ex, $"Error while optimizing icon for '{game.Name}'.");
+                    iconFailed = true;
+                    failureMessage = failureMessage ?? ex.Message;
                 }
+            }
+
+            if (backgroundFailed || coverFailed || iconFailed)
+            {
+                api.Notifications.Add(
+                    "metadataimageoptimizer-optimize-failed"
+                    , $"Failed to optimize images of '{game.Name}': {failureMessage}"
+                    , NotificationType.Error);
             }
 
             // Ensure we have the latest copy of {game} again in case it changed during the optimization
@@ -386,7 +407,7 @@ namespace MetadataImageOptimizer
                 api.Database.Games.Update(game);
             }
 
-            OptimizationCacheHelper.Add(game);
+            OptimizationCacheHelper.Add(game, backgroundFailed, coverFailed, iconFailed);
         }
 
         #region Background processing
@@ -395,7 +416,7 @@ namespace MetadataImageOptimizer
         private Thread backgroundOptimizeThread;
         private string BackgroundOptimizeQueueFilePath => Path.Combine(GetPluginUserDataPath(), "optimize-queue");
 
-        private void QueueOptimizeGame(Guid gameId, bool optimizeBackground, bool optimizeCover, bool optimizeIcon)
+        private void QueueOptimizeGame(Guid gameId, bool optimizeBackground, bool optimizeCover, bool optimizeIcon, bool force = false)
         {
             var existingItem = backgroundOptimizeQueue.FirstOrDefault(x => x.GameId == gameId);
             if (existingItem != null)
@@ -403,10 +424,11 @@ namespace MetadataImageOptimizer
                 existingItem.OptimizeBackground |= optimizeBackground;
                 existingItem.OptimizeCover |= optimizeCover;
                 existingItem.OptimizeIcon |= optimizeIcon;
+                existingItem.Force |= force;
             }
             else
             {
-                var queueItem = new OptimizeQueueItem(gameId, optimizeBackground, optimizeCover, optimizeIcon);
+                var queueItem = new OptimizeQueueItem(gameId, optimizeBackground, optimizeCover, optimizeIcon, force);
                 backgroundOptimizeQueue.Enqueue(queueItem);
             }
 
@@ -448,7 +470,7 @@ namespace MetadataImageOptimizer
 
             while (!Environment.HasShutdownStarted && backgroundOptimizeQueue.TryDequeue(out var item))
             {
-                OptimizeGame(item.GameId, item.OptimizeBackground, item.OptimizeCover, item.OptimizeIcon);
+                OptimizeGame(item.GameId, item.OptimizeBackground, item.OptimizeCover, item.OptimizeIcon, item.Force);
 
                 if (++handled % 100u == 0u)
                 {
@@ -494,13 +516,17 @@ namespace MetadataImageOptimizer
             {
                 var parts = line.Split(',');
 
-                if (parts.Length == 4 &&
+                // The force flag was added later, so queue files written by older versions only have four fields
+                var force = false;
+
+                if ((parts.Length == 4 || parts.Length == 5) &&
                     Guid.TryParse(parts[0], out var gameId) &&
                     bool.TryParse(parts[1], out var optimizeBackground) &&
                     bool.TryParse(parts[2], out var optimizeCover) &&
-                    bool.TryParse(parts[3], out var optimizeIcon))
+                    bool.TryParse(parts[3], out var optimizeIcon) &&
+                    (parts.Length == 4 || bool.TryParse(parts[4], out force)))
                 {
-                    backgroundOptimizeQueue.Enqueue(new OptimizeQueueItem(gameId, optimizeBackground, optimizeCover, optimizeIcon));
+                    backgroundOptimizeQueue.Enqueue(new OptimizeQueueItem(gameId, optimizeBackground, optimizeCover, optimizeIcon, force));
                 }
                 else
                 {
@@ -518,7 +544,7 @@ namespace MetadataImageOptimizer
                 File.WriteAllLines(
                     BackgroundOptimizeQueueFilePath
                     , backgroundOptimizeQueue.Select(
-                        queueItem => $"{queueItem.GameId},{queueItem.OptimizeBackground},{queueItem.OptimizeCover},{queueItem.OptimizeIcon}"));
+                        queueItem => $"{queueItem.GameId},{queueItem.OptimizeBackground},{queueItem.OptimizeCover},{queueItem.OptimizeIcon},{queueItem.Force}"));
             }
         }
         #endregion
