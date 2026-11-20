@@ -26,7 +26,13 @@ namespace MetadataImageOptimizer
         private readonly List<SupportedAddonBase> supportedAddons;
 
         private MetadataImageOptimizerSettingsViewModel settingsVm { get; set; }
-        private Guid inProcessGameId;
+
+        /// <summary>
+        /// Games that are currently being optimized. The database update the optimizer performs on a game raises
+        /// <see cref="OnGameUpdated"/> again, which would otherwise start a second optimization (and a second
+        /// progress dialog) for the same game.
+        /// </summary>
+        private readonly ConcurrentDictionary<Guid, byte> gamesInProcess = new ConcurrentDictionary<Guid, byte>();
 
         public override Guid Id { get; } = Guid.Parse("17b571ff-6ffe-4bea-ad25-32e52b54f9d3");
 
@@ -130,8 +136,8 @@ namespace MetadataImageOptimizer
                         && change.OldData.IsLaunching == change.NewData.IsLaunching
                         && change.OldData.IsRunning == change.NewData.IsRunning
                         && change.OldData.IsUninstalling == change.NewData.IsUninstalling)
-                // Ignore the game we are currently updating
-                .Where(change => change.OldData.Id != inProcessGameId)
+                // Ignore games we are currently updating
+                .Where(change => !gamesInProcess.ContainsKey(change.OldData.Id))
                 // Only keep games where an enabled image type actually changed
                 .Where(change => ShouldOptimize(change, optimizerSettings))
                 .ToList();
@@ -264,6 +270,26 @@ namespace MetadataImageOptimizer
         }
 
         private void OptimizeGame(Guid gameId, bool optimizeBackground, bool optimizeCover, bool optimizeIcon)
+        {
+            // Register the game before touching the database, so the ItemUpdated event raised by our own update
+            // is ignored instead of starting a second optimization (and a second progress dialog) for it.
+            if (!gamesInProcess.TryAdd(gameId, 0))
+            {
+                logger.Debug($"Skipping optimization of '{gameId}'. It is already being processed.");
+                return;
+            }
+
+            try
+            {
+                OptimizeGameCore(gameId, optimizeBackground, optimizeCover, optimizeIcon);
+            }
+            finally
+            {
+                gamesInProcess.TryRemove(gameId, out _);
+            }
+        }
+
+        private void OptimizeGameCore(Guid gameId, bool optimizeBackground, bool optimizeCover, bool optimizeIcon)
         {
             var pathsChanged = false;
             var optimizerSettings = settingsVm.Settings;
@@ -422,7 +448,6 @@ namespace MetadataImageOptimizer
 
             while (!Environment.HasShutdownStarted && backgroundOptimizeQueue.TryDequeue(out var item))
             {
-                inProcessGameId = item.GameId;
                 OptimizeGame(item.GameId, item.OptimizeBackground, item.OptimizeCover, item.OptimizeIcon);
 
                 if (++handled % 100u == 0u)
@@ -440,12 +465,10 @@ namespace MetadataImageOptimizer
                         $"Background processing was turned off. Cleared queue of {backgroundOptimizeQueue.Count} items."
                         , "MetadataImageOptimizer - Stopped background processing");
                     ClearBackgroundOptimizeQueue();
-                    inProcessGameId = Guid.Empty;
                     return;
                 }
             }
 
-            inProcessGameId = Guid.Empty;
             SaveBackgroundOptimizeQueueToFile();
         }
 

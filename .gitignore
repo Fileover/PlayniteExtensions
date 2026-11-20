@@ -33,3 +33,5 @@ _ReSharper*/
 .vs/
 *.pubxml
 .workbuddy-ai/
+# The bundled JPEG XL encoder must be committed, despite the *.exe rule above
+!src/MetadataImageOptimizer/Tools/cjxl.exe

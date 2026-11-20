@@ -9,6 +9,10 @@ namespace MetadataImageOptimizer.Settings
     public class QualitySettings : ObservableObject
     {
         private int jpgQuality;
+        private int jxlQuality;
+        private bool jxlLossless;
+        private int jxlEffort = 7;
+        private int jxlBrotliEffort = 9;
         private PngCompressionLevel pngCompressionLevel;
         private WebpEncodingMethod webpEncodingMethod;
         private int webpQuality;
@@ -53,6 +57,56 @@ namespace MetadataImageOptimizer.Settings
                 value = Math.Max(1, value);
 
                 SetValue(ref jpgQuality, value);
+            }
+        }
+
+        public int JxlQuality
+        {
+            get => jxlQuality;
+            set
+            {
+                value = Math.Min(100, value);
+                value = Math.Max(1, value);
+
+                SetValue(ref jxlQuality, value);
+            }
+        }
+
+        /// <summary>
+        /// When enabled, JPEG XL images are encoded mathematically losslessly (cjxl --distance=0) instead of
+        /// using a quality value. <see cref="JxlQuality"/> is ignored in that case.
+        /// </summary>
+        public bool JxlLossless { get => jxlLossless; set => SetValue(ref jxlLossless, value); }
+
+        /// <summary>
+        /// cjxl encoder effort, 1 to 11. Higher values take longer and produce smaller files. 11 is an expert
+        /// mode that only makes sense for lossless output.
+        /// </summary>
+        public int JxlEffort
+        {
+            get => jxlEffort;
+            set
+            {
+                value = Math.Min(11, value);
+                value = Math.Max(1, value);
+
+                SetValue(ref jxlEffort, value);
+            }
+        }
+
+        /// <summary>
+        /// cjxl Brotli effort, 0 to 11. Only affects the metadata boxes (colour profile, EXIF, XMP), so it has
+        /// no effect on images whose metadata is removed.
+        /// </summary>
+        public int JxlBrotliEffort
+        {
+            get => jxlBrotliEffort;
+            set
+            {
+                value = Math.Min(11, value);
+                value = Math.Max(0, value);
+
+                SetValue(ref jxlBrotliEffort, value);
             }
         }
 

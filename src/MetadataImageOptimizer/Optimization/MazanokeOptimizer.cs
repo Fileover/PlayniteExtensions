@@ -67,6 +67,11 @@ namespace MetadataImageOptimizer.Optimization
                 targetFormat = IsSupportedFormat(sourceFormat) ? sourceFormat : "png";
             }
 
+            if (sourceFormat == "jxl")
+            {
+                return OptimizeJxlSource(imagePath, imageSettings, qualitySettings, targetFormat, originalBytes);
+            }
+
             var loadPath = imagePath;
             string extractedIconPath = null;
 
@@ -92,10 +97,7 @@ namespace MetadataImageOptimizer.Optimization
                         StripMetadata(image);
                     }
 
-                    var targetBytes = imageSettings.Compression == CompressionMode.TargetSize
-                        ? Math.Max(1L, imageSettings.TargetSizeKb) * 1024L
-                        : (long?)null;
-
+                    var targetBytes = GetTargetBytes(imageSettings);
                     var attempt = Encode(image, targetFormat, qualitySettings, targetBytes);
                     var converted = !string.Equals(targetFormat, sourceFormat, StringComparison.OrdinalIgnoreCase);
 
@@ -207,9 +209,58 @@ namespace MetadataImageOptimizer.Optimization
                 case "png":
                     return EncodePng(image, targetBytes, qualitySettings);
 
+                case "jxl":
+                    return EncodeJxl(image, targetBytes, qualitySettings);
+
                 default:
                     throw new NotSupportedException($"Format '{format}' is not supported by the image optimizer.");
             }
+        }
+
+        /// <summary>
+        /// JPEG XL files cannot be decoded by ImageSharp, so they are re-encoded by cjxl.exe itself. That means
+        /// dimension limits and conversion to another format cannot be applied to them.
+        /// </summary>
+        private static OptimizationResult OptimizeJxlSource(
+            string imagePath
+            , ImageTypeSettings imageSettings
+            , QualitySettings qualitySettings
+            , string targetFormat
+            , long originalBytes)
+        {
+            if (targetFormat != "jxl")
+            {
+                Logger.Warn($"Skipping '{Path.GetFileName(imagePath)}': JPEG XL images can only be re-encoded to JPEG XL, not converted to {targetFormat}.");
+                return OptimizationResult.Unchanged(imagePath, originalBytes, "jxl");
+            }
+
+            if (imageSettings.MaxWidth > 0 || imageSettings.MaxHeight > 0)
+            {
+                Logger.Debug($"'{Path.GetFileName(imagePath)}': dimension limits are not applied to JPEG XL images.");
+            }
+
+            var targetBytes = GetTargetBytes(imageSettings);
+            var attempt = EncodeJxlFile(imagePath, targetBytes, qualitySettings);
+
+            if (!attempt.TargetReached)
+            {
+                Logger.Warn($"Could not reach the target size of {targetBytes} bytes for '{Path.GetFileName(imagePath)}' (smallest result: {attempt.Bytes.LongLength} bytes).");
+            }
+
+            if (qualitySettings.SkipIfLarger && attempt.Bytes.LongLength >= originalBytes)
+            {
+                Logger.Debug($"Skipping '{Path.GetFileName(imagePath)}': optimized size ({attempt.Bytes.LongLength} bytes) is not smaller than the original ({originalBytes} bytes).");
+                return OptimizationResult.Unchanged(imagePath, originalBytes, "jxl");
+            }
+
+            WriteAtomically(imagePath, attempt.Bytes);
+
+            var result = new OptimizationResult(
+                imagePath, false, false, originalBytes, attempt.Bytes.LongLength
+                , "jxl", attempt.Quality, attempt.TargetReached);
+
+            Logger.Debug($"Optimized '{Path.GetFileName(imagePath)}' in place: {originalBytes} -> {attempt.Bytes.LongLength} bytes ({result.PercentSaved:0.0}% saved).");
+            return result;
         }
 
         /// <summary>
@@ -218,8 +269,17 @@ namespace MetadataImageOptimizer.Optimization
         /// </summary>
         private static EncodeAttempt EncodeLossy(Image image, long? targetBytes, int requestedQuality, Func<int, IImageEncoder> encoderFactory)
         {
+            return EncodeLossy(targetBytes, requestedQuality, quality => EncodeToArray(image, encoderFactory(quality)));
+        }
+
+        /// <summary>
+        /// Encodes the image and, when a size budget was supplied, searches for the highest quality that still
+        /// fits inside it.
+        /// </summary>
+        private static EncodeAttempt EncodeLossy(long? targetBytes, int requestedQuality, Func<int, byte[]> encode)
+        {
             var initialQuality = Math.Min(MaximumQuality, Math.Max(MinimumQuality, requestedQuality));
-            var bytes = EncodeToArray(image, encoderFactory(initialQuality));
+            var bytes = encode(initialQuality);
 
             if (targetBytes == null)
             {
@@ -240,7 +300,7 @@ namespace MetadataImageOptimizer.Optimization
             for (var iteration = 0; low <= high && iteration < MaximumSearchIterations; iteration++)
             {
                 var mid = low + ((high - low) / 2);
-                var candidate = EncodeToArray(image, encoderFactory(mid));
+                var candidate = encode(mid);
 
                 if (candidate.LongLength <= targetBytes.Value)
                 {
@@ -260,8 +320,64 @@ namespace MetadataImageOptimizer.Optimization
             }
 
             // The budget can't be met at any quality: fall back to the smallest result we can produce
-            var smallest = EncodeToArray(image, encoderFactory(MinimumQuality));
+            var smallest = encode(MinimumQuality);
             return new EncodeAttempt(smallest, MinimumQuality, smallest.LongLength <= targetBytes.Value);
+        }
+
+        /// <summary>
+        /// JPEG XL is encoded through cjxl.exe, which only reads files, so the processed image is written to a
+        /// temporary lossless PNG first.
+        /// </summary>
+        private static EncodeAttempt EncodeJxl(Image image, long? targetBytes, QualitySettings qualitySettings)
+        {
+            var inputPath = Path.Combine(Path.GetTempPath(), Path.ChangeExtension(Guid.NewGuid().ToString(), "png"));
+
+            try
+            {
+                // Level 1 keeps the intermediate quick to write while the image data itself stays lossless
+                using (var stream = File.Create(inputPath))
+                {
+                    image.Save(stream, new PngEncoder { CompressionLevel = PngCompressionLevel.Level1 });
+                }
+
+                return EncodeJxlFile(inputPath, targetBytes, qualitySettings);
+            }
+            finally
+            {
+                TryDelete(inputPath);
+            }
+        }
+
+        /// <summary>
+        /// Encodes a file cjxl can read (the temporary PNG above, or an existing JPEG XL image) using the
+        /// configured JPEG XL options.
+        /// </summary>
+        private static EncodeAttempt EncodeJxlFile(string inputPath, long? targetBytes, QualitySettings qualitySettings)
+        {
+            var effort = qualitySettings.JxlEffort;
+            var brotliEffort = qualitySettings.JxlBrotliEffort;
+
+            if (qualitySettings.JxlLossless)
+            {
+                // Lossless output can't be shrunk by lowering a quality value, so the budget is only checked
+                var bytes = JxlEncoder.Encode(inputPath, null, effort, brotliEffort);
+                return new EncodeAttempt(bytes, null, targetBytes == null || bytes.LongLength <= targetBytes.Value);
+            }
+
+            return EncodeLossy(
+                targetBytes
+                , qualitySettings.JxlQuality
+                , quality => JxlEncoder.Encode(inputPath, quality, effort, brotliEffort));
+        }
+
+        /// <summary>
+        /// The size budget in bytes, or <c>null</c> when the image type uses a fixed quality instead.
+        /// </summary>
+        private static long? GetTargetBytes(ImageTypeSettings imageSettings)
+        {
+            return imageSettings.Compression == CompressionMode.TargetSize
+                ? Math.Max(1L, imageSettings.TargetSizeKb) * 1024L
+                : (long?)null;
         }
 
         /// <summary>
@@ -396,7 +512,7 @@ namespace MetadataImageOptimizer.Optimization
 
         private static bool IsSupportedFormat(string format)
         {
-            return format == "jpg" || format == "png" || format == "webp";
+            return format == "jpg" || format == "png" || format == "webp" || format == "jxl";
         }
 
         private static void TryDelete(string path)

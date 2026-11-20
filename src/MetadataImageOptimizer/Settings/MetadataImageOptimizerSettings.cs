@@ -26,6 +26,7 @@ namespace MetadataImageOptimizer.Settings
             { "jpg", "JPG" }
             , { "png", "PNG" }
             , { "webp", "WebP (Lossy)" }
+            , { "jxl", "JPEG XL" }
         };
 
         [DontSerialize]
@@ -83,6 +84,10 @@ namespace MetadataImageOptimizer.Settings
             quality = new QualitySettings
             {
                 JpgQuality = 90
+                , JxlQuality = 90
+                , JxlLossless = false
+                , JxlEffort = 7
+                , JxlBrotliEffort = 9
                 , PngCompressionLevel = PngCompressionLevel.Level6
                 , WebpEncodingMethod = WebpEncodingMethod.Level4
                 , WebpQuality = 90
