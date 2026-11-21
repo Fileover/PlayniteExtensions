@@ -122,7 +122,7 @@ namespace MetadataImageOptimizer.Settings
 
         /// <summary>
         /// Uses Zopfli instead of the default deflate implementation in oxipng. It produces slightly smaller
-        /// files and takes roughly ten times longer.
+        /// files and can take minutes per image.
         /// </summary>
         public bool PngUseZopfli { get => pngUseZopfli; set => SetValue(ref pngUseZopfli, value); }
 

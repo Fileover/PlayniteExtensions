@@ -15,6 +15,11 @@ namespace MetadataImageOptimizer.Optimization
     {
         private const string ExecutableName = "oxipng.exe";
 
+        /// <summary>
+        /// Zopfli iterations. 255 is past the point where more iterations only save a few dozen bytes.
+        /// </summary>
+        private const int ZopfliIterations = 255;
+
         private const double SecondsPerMegapixel = 30;
         private const double ZopfliSecondsPerMegapixel = 120;
 
@@ -41,7 +46,7 @@ namespace MetadataImageOptimizer.Optimization
                 File.WriteAllBytes(path, pngBytes);
 
                 var arguments = useZopfli
-                    ? $"-o max -z --quiet \"{path}\""
+                    ? $"-o max -z --zi {ZopfliIterations} --quiet \"{path}\""
                     : $"-o max --quiet \"{path}\"";
 
                 Run(arguments, GetTimeout(pixelCount, useZopfli));

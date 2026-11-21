@@ -50,14 +50,20 @@ The `Quality` tab has two options for this:
 | Option | Effect |
 | --- | --- |
 | **Optimize PNG losslessly with oxipng** | Runs oxipng at its maximum optimization level. Enabled by default. |
-| **Use Zopfli for PNG** | Uses Zopfli as oxipng's deflate backend (Apache-2.0, see `Tools/ZOPFLI-LICENSE.txt`). Slightly smaller files, roughly ten times slower. Disabled by default. |
+| **Use Zopfli for PNG** | Uses Zopfli as oxipng's deflate backend at 255 iterations (Apache-2.0, see `Tools/ZOPFLI-LICENSE.txt`). Slightly smaller files, but it can take minutes per image. Disabled by default. |
 
 Measured on the project's 256×256 icon and on a 1920×620 background:
 
 | Image | ImageSharp only | oxipng | oxipng + Zopfli |
 | --- | --- | --- | --- |
-| icon.png (9,326 B) | 9,829 B | **5,218 B** | **5,095 B** |
-| background (1,414,897 B) | 1,469,736 B | **1,357,428 B** | **1,354,976 B** |
+| icon.png (9,326 B) | 9,829 B | **5,218 B** | **5,092 B** |
+| background (1,414,897 B) | 1,469,736 B | **1,357,428 B** | **1,351,680 B** |
+
+On the 512×512 RGBA test image (541,741 B), oxipng + Zopfli at 255 iterations produced 514,738 B, the official
+`zopflipng` with 100 iterations and all filters produced 516,523 B, and YOGA's slow PNG preset produced 516,912 B.
+All three decoded to the same RGBA pixels as the input. YOGA enables zopflipng's `lossy_8bit` and
+`lossy_transparent` options, so it is not guaranteed lossless for every image; the extension runs oxipng without
+`--alpha` or `--scale16`, which keeps the output strictly lossless.
 
 For comparison, [MAZANOKE](https://mazanoke.com/)'s web version produces 1,083,564 B for the same background,
 but it is not lossless: its bundled `browser-image-compression` calls `UPNG.encode(..., 4096 * quality)`, which

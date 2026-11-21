@@ -235,6 +235,6 @@
       Margin="10,10,0,0"
       FontFamily="{DynamicResource FontIcoFont}"
       Text="&#xefca;"
-      ToolTip="Uses Zopfli instead of the default deflate implementation. It produces slightly smaller PNG files and takes roughly ten times longer. Requires the oxipng option above." />
+      ToolTip="Uses Zopfli instead of the default deflate implementation. It produces slightly smaller PNG files and can take minutes per image. Requires the oxipng option above." />
   </Grid>
 </UserControl>
