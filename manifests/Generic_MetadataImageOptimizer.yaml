@@ -83,6 +83,7 @@ Packages:
     PackageUrl: https://github.com/UrbanCMC/PlayniteExtensions/releases/download/metadataimageoptimizer1.11/MetadataImageOptimizer_1_11.pext
     Changelog:
     - Added JPEG XL output through the bundled libjxl cjxl.exe encoder, with quality, lossless, effort and Brotli effort settings
+    - Added lossless PNG optimization through the bundled oxipng, with an optional Zopfli backend
     - Fixed the duplicate progress dialog when a game update triggered another optimization
     - Fixed background images being skipped after a slow JPEG XL encode - the timeout now scales with image size and effort, failed images are retried, and manual optimization bypasses the cache
     - Added scrollbars to settings window when controls don''t fit otherwise

@@ -37,6 +37,34 @@ Two additional options live on the `Quality` tab:
 - **Keep the original if the optimized image is larger** — prevents an already optimized image from being
   replaced by a bigger file.
 
+#### PNG
+
+PNG output is lossless by default, so the only way to make it smaller without changing pixels is a better
+encoder. The extension ships [oxipng](https://github.com/oxipng/oxipng) in the `Tools` folder (MIT, see
+`src/MetadataImageOptimizer/Tools/OXIPNG-LICENSE.txt`) and re-encodes every PNG with it after ImageSharp. oxipng
+tries different scanline filters and can reduce the colour type or palette without touching the pixel values.
+The optimized file is only used when it is smaller; if oxipng is missing or fails, the ImageSharp output is kept.
+
+The `Quality` tab has two options for this:
+
+| Option | Effect |
+| --- | --- |
+| **Optimize PNG losslessly with oxipng** | Runs oxipng at its maximum optimization level. Enabled by default. |
+| **Use Zopfli for PNG** | Uses Zopfli as oxipng's deflate backend (Apache-2.0, see `Tools/ZOPFLI-LICENSE.txt`). Slightly smaller files, roughly ten times slower. Disabled by default. |
+
+Measured on the project's 256×256 icon and on a 1920×620 background:
+
+| Image | ImageSharp only | oxipng | oxipng + Zopfli |
+| --- | --- | --- | --- |
+| icon.png (9,326 B) | 9,829 B | **5,218 B** | **5,095 B** |
+| background (1,414,897 B) | 1,469,736 B | **1,357,428 B** | **1,354,976 B** |
+
+For comparison, [MAZANOKE](https://mazanoke.com/)'s web version produces 1,083,564 B for the same background,
+but it is not lossless: its bundled `browser-image-compression` calls `UPNG.encode(..., 4096 * quality)`, which
+quantizes the image to a palette of at most 4096 colours even at quality 100. That is why it can beat a lossless
+encoder on size. The extension's `Target size` mode is the lossy PNG path; `Quality` mode deliberately stays
+lossless, and oxipng closes most of the gap without changing a single pixel.
+
 #### JPEG XL
 
 Images can also be converted to JPEG XL (`.jxl`). ImageSharp has no JPEG XL encoder, so the extension shells out

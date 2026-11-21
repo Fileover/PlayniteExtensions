@@ -14,6 +14,8 @@ namespace MetadataImageOptimizer.Settings
         private int jxlEffort = 7;
         private int jxlBrotliEffort = 9;
         private PngCompressionLevel pngCompressionLevel;
+        private bool pngUseOxipng = true;
+        private bool pngUseZopfli;
         private WebpEncodingMethod webpEncodingMethod;
         private int webpQuality;
         private bool stripMetadata = true;
@@ -111,6 +113,18 @@ namespace MetadataImageOptimizer.Settings
         }
 
         public PngCompressionLevel PngCompressionLevel { get => pngCompressionLevel; set => SetValue(ref pngCompressionLevel, value); }
+
+        /// <summary>
+        /// When enabled, PNG output is re-encoded by the bundled oxipng binary. The optimization is lossless:
+        /// it changes filters, colour type and palette, but not the pixels.
+        /// </summary>
+        public bool PngUseOxipng { get => pngUseOxipng; set => SetValue(ref pngUseOxipng, value); }
+
+        /// <summary>
+        /// Uses Zopfli instead of the default deflate implementation in oxipng. It produces slightly smaller
+        /// files and takes roughly ten times longer.
+        /// </summary>
+        public bool PngUseZopfli { get => pngUseZopfli; set => SetValue(ref pngUseZopfli, value); }
 
         public WebpEncodingMethod WebpEncodingMethod { get => webpEncodingMethod; set => SetValue(ref webpEncodingMethod, value); }
 

@@ -32,6 +32,8 @@
       <RowDefinition Height="Auto" />
       <RowDefinition Height="Auto" />
       <RowDefinition Height="Auto" />
+      <RowDefinition Height="Auto" />
+      <RowDefinition Height="Auto" />
     </Grid.RowDefinitions>
     <Grid.ColumnDefinitions>
       <ColumnDefinition Width="Auto" />
@@ -198,5 +200,41 @@
       FontFamily="{DynamicResource FontIcoFont}"
       Text="&#xefca;"
       ToolTip="Prevents an image from being replaced by a bigger file, which can happen when re-compressing an already optimized image. Images that are resized are always written." />
+
+    <CheckBox Grid.Row="10"
+      Grid.Column="0"
+      Grid.ColumnSpan="2"
+      Margin="0,10,0,0"
+      Content="Optimize PNG losslessly with oxipng"
+      IsChecked="{Binding Settings.Quality.PngUseOxipng}" />
+    <TextBlock Grid.Row="10"
+      Grid.Column="2"
+      Margin="10,10,0,0"
+      FontFamily="{DynamicResource FontIcoFont}"
+      Text="&#xefca;"
+      ToolTip="Re-encodes PNG output with the bundled oxipng. It changes filters, colour type and palette without changing any pixel, so the result stays lossless. The optimized file is only used when it is smaller." />
+
+    <CheckBox Grid.Row="11"
+      Grid.Column="0"
+      Grid.ColumnSpan="2"
+      Margin="0,10,0,0"
+      Content="Use Zopfli for PNG (slowest, slightly smaller)"
+      IsChecked="{Binding Settings.Quality.PngUseZopfli}">
+      <CheckBox.Style>
+        <Style BasedOn="{StaticResource {x:Type CheckBox}}" TargetType="CheckBox">
+          <Style.Triggers>
+            <DataTrigger Binding="{Binding Settings.Quality.PngUseOxipng}" Value="False">
+              <Setter Property="IsEnabled" Value="False" />
+            </DataTrigger>
+          </Style.Triggers>
+        </Style>
+      </CheckBox.Style>
+    </CheckBox>
+    <TextBlock Grid.Row="11"
+      Grid.Column="2"
+      Margin="10,10,0,0"
+      FontFamily="{DynamicResource FontIcoFont}"
+      Text="&#xefca;"
+      ToolTip="Uses Zopfli instead of the default deflate implementation. It produces slightly smaller PNG files and takes roughly ten times longer. Requires the oxipng option above." />
   </Grid>
 </UserControl>

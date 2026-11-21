@@ -89,6 +89,8 @@ namespace MetadataImageOptimizer.Settings
                 , JxlEffort = 7
                 , JxlBrotliEffort = 9
                 , PngCompressionLevel = PngCompressionLevel.Level6
+                , PngUseOxipng = true
+                , PngUseZopfli = false
                 , WebpEncodingMethod = WebpEncodingMethod.Level4
                 , WebpQuality = 90
                 , StripMetadata = true

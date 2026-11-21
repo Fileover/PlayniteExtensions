@@ -393,12 +393,14 @@ namespace MetadataImageOptimizer.Optimization
         }
 
         /// <summary>
-        /// PNG is lossless, so the compression level is the only lossless lever. When a size budget was supplied
-        /// and lossless compression isn't enough, the image is quantized to a 256 colour palette as a last resort.
+        /// PNG is lossless, so the encoder and compression level are the only lossless levers. oxipng improves
+        /// the filters and colour type without changing pixels; when a size budget still isn't met, the image is
+        /// quantized to a 256 colour palette as a last resort.
         /// </summary>
         private static EncodeAttempt EncodePng(Image image, long? targetBytes, QualitySettings qualitySettings)
         {
             var bytes = EncodeToArray(image, new PngEncoder { CompressionLevel = qualitySettings.PngCompressionLevel });
+            bytes = OptimizePng(bytes, image, qualitySettings);
 
             if (targetBytes == null || bytes.LongLength <= targetBytes.Value)
             {
@@ -408,6 +410,7 @@ namespace MetadataImageOptimizer.Optimization
             if (qualitySettings.PngCompressionLevel != PngCompressionLevel.Level9)
             {
                 var maximumCompression = EncodeToArray(image, new PngEncoder { CompressionLevel = PngCompressionLevel.Level9 });
+                maximumCompression = OptimizePng(maximumCompression, image, qualitySettings);
                 if (maximumCompression.LongLength < bytes.LongLength)
                 {
                     bytes = maximumCompression;
@@ -451,7 +454,30 @@ namespace MetadataImageOptimizer.Optimization
                 }
             }
 
+            bytes = OptimizePng(bytes, image, qualitySettings);
             return new EncodeAttempt(bytes, null, bytes.LongLength <= targetBytes.Value);
+        }
+
+        /// <summary>
+        /// Re-encodes PNG output with oxipng. The optimization is lossless and only kept when it makes the file
+        /// smaller. A failure here is not fatal: the ImageSharp output is used instead.
+        /// </summary>
+        private static byte[] OptimizePng(byte[] bytes, Image image, QualitySettings qualitySettings)
+        {
+            if (!qualitySettings.PngUseOxipng || !OxipngEncoder.IsAvailable)
+            {
+                return bytes;
+            }
+
+            try
+            {
+                return OxipngEncoder.Optimize(bytes, (long)image.Width * image.Height, qualitySettings.PngUseZopfli);
+            }
+            catch (Exception ex)
+            {
+                Logger.Warn($"Failed to optimize PNG with oxipng: {ex.Message}");
+                return bytes;
+            }
         }
 
         private static byte[] EncodeToArray(Image image, IImageEncoder encoder)
